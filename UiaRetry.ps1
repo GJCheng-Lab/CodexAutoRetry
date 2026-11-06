@@ -15,6 +15,9 @@ param(
 
 $ErrorActionPreference='Stop'
 $failedNames=@('Task failed',([string][char]0x4efb+[char]0x52a1+[char]0x672a+[char]0x6210+[char]0x529f),([string][char]0x4efb+[char]0x52a1+[char]0x5931+[char]0x8d25))
+$retryNames=@('Retry',([string][char]0x91cd+[char]0x8bd5),([string][char]0x91cd+[char]0x8a66))
+$stopNames=@('Stop',([string][char]0x505c+[char]0x6b62))
+$voiceNames=@('Voice',([string][char]0x542c+[char]0x5199))
 
 function Clean([object]$v) { if($null -eq $v){return ''}; return (([string]$v) -replace '[\t\r\n]+',' ' -replace '\|','/') }
 function RectText($r) { if($null -eq $r -or $r.Width -le 0 -or $r.Height -le 0){return ''}; '{0},{1},{2},{3}' -f ([int]$r.X),([int]$r.Y),([int]$r.Width),([int]$r.Height) }
@@ -182,7 +185,7 @@ try {
 
     if($Mode -eq 'invoke-retry') {
       $errors=@($all | Where-Object { $_.Current.Name -and $_.Current.Name -match 'Selected model is at capacity' })
-      $buttons=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and @('Retry','重试','重試') -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
+      $buttons=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $retryNames -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
       $best=$null;$bestDy=[double]::PositiveInfinity
       foreach($b in $buttons){$br=$b.Current.BoundingRectangle;$by=$br.Y+$br.Height/2;foreach($er in $errors){$erx=$er.Current.BoundingRectangle;$ey=$erx.Y+$erx.Height/2;$dy=[Math]::Abs($by-$ey);if($dy -le [Math]::Max(40,$br.Height*2) -and $br.X -gt $erx.X -and $dy -lt $bestDy){$best=$b;$bestDy=$dy}}}
       if($best){
@@ -214,15 +217,14 @@ try {
         Emit 'RESULT|COMPOSER_HAS_CONTENT|Visible enabled composer contains user content; no send action is permitted.'
       }
       $errors=@($all | Where-Object { $_.Current.Name -and $_.Current.Name -match 'Selected model is at capacity' })
-      $running=@($all | Where-Object { $_.Current.Name -and $_.Current.Name -match '^(Stop|停止)$' -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
+      $running=@($all | Where-Object { $stopNames -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
       if($hasComposerContent){ }
       elseif($running.Count -gt 0){Emit 'RESULT|RUNNING_SIGNAL|A current stop control is visible; send fallback is skipped.'}
       elseif($errors.Count -eq 0){Emit 'RESULT|NO_CURRENT_CAPACITY|No current capacity error was exposed by UIA.'}
       else {
         $rr=$root.Current.BoundingRectangle
         $sendNames=@('Send','Continue',([string][char]0x53d1+[char]0x9001),([string][char]0x7ee7+[char]0x7eed))
-        $voiceNames=@('Voice',([string][char]0x8bed+[char]0x97f3))
-        $excludedActionNames=@('Voice','听写','Stop','停止','Retry','重试','重試')
+        $excludedActionNames=@('Voice','Stop','Retry')+$voiceNames+$stopNames+$retryNames
         $actions=@($all | Where-Object {
           $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and
           $_.Current.IsEnabled -and -not $_.Current.IsOffscreen -and
@@ -246,11 +248,11 @@ try {
     }
 
     if($Mode -eq 'current') {
-      $running=@($all | Where-Object { $_.Current.Name -and $_.Current.Name -match '^(Stop|停止)$' -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
+      $running=@($all | Where-Object { $stopNames -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
       if($running.Count -gt 0){Emit 'RESULT|RUNNING_SIGNAL|A current stop control is visible; retry is skipped.'}
       else {
       $errors=@($all | Where-Object { $_.Current.Name -and $_.Current.Name -match 'Selected model is at capacity' })
-      $buttons=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and @('Retry','重试','重試') -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
+      $buttons=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $retryNames -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
       $best=$null;$bestDy=[double]::PositiveInfinity;$bestError=''
       foreach($b in $buttons){$br=$b.Current.BoundingRectangle;$by=$br.Y+$br.Height/2;foreach($er in $errors){$erx=$er.Current.BoundingRectangle;$ey=$erx.Y+$erx.Height/2;$dy=[Math]::Abs($by-$ey);if($dy -le [Math]::Max(40,$br.Height*2) -and $br.X -gt $erx.X -and $dy -lt $bestDy){$best=$b;$bestDy=$dy;$bestError=Clean $er.Current.Name}}}
       if($best){$r=$best.Current.BoundingRectangle;Emit ("RETRY|error={0}|button={1}|screen_x={2}|screen_y={3}|rect={4}|state=VISIBLE_ENABLED_MATCHED" -f $bestError,(Clean $best.Current.Name),([int]($r.X+$r.Width/2)),([int]($r.Y+$r.Height/2)),(RectText $r))}
