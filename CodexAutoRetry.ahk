@@ -11,7 +11,6 @@ SetControlDelay -1
 ; real mouse or send keyboard input.
 
 psFile := A_ScriptDir "\UiaRetry.ps1"
-statePs := A_ScriptDir "\CodexStateReader.ps1"
 logFile := A_ScriptDir "\retry.log"
 cfg := A_ScriptDir "\settings.ini"
 scanMs := ReadNumber("scan_seconds",5,1,60)*1000
@@ -32,10 +31,6 @@ noticeGui:=0
 noticeAlpha:=0
 if !FileExist(psFile) {
  MsgBox "缺少 UiaRetry.ps1。","Codex Auto Retry","Iconx"
- ExitApp()
-}
-if !FileExist(statePs) {
- MsgBox "缺少 CodexStateReader.ps1。","Codex Auto Retry","Iconx"
  ExitApp()
 }
 SetTimer AutoBindTimer, 1000
@@ -182,8 +177,10 @@ ScanTimer(){
  busy:=true
  try {
    sessions:=ParseSessions(RunUIA("scan"))
-   stateSessions:=ParseStateFailures(RunState())
-   candidates:=MergeCandidates(sessions,stateSessions)
+   ; Automatic actions are driven only by the live UIA sidebar marker.
+   ; CodexStateReader.ps1 remains a read-only diagnostic tool and never adds
+   ; a candidate by itself.
+   candidates:=sessions
    for _,s in candidates {
      if !sessionState.Has(s.key) {
        sessionState[s.key]:={project:s.project,title:s.title,last:0,tick:0,tries:0,result:"DETECTED"}
@@ -433,39 +430,6 @@ FindSession(list,key){
    }
  return found
 }
-ParseStateFailures(text){
- out:=[]
- for _,line in StrSplit(text,Chr(10)){
-  p:=StrSplit(Trim(line),"|")
-  if p.Length<2||p[1]!="STATE_FAILURE"
-   continue
-  m:=Map()
-  for i,v in p
-   if i>1&&InStr(v,"="){
-    q:=StrSplit(v,"=",2),m[q[1]]:=q[2]
-   }
-  if m.Has("thread_id")&&m.Has("title")&&m["title"]!=""
-   out.Push({key:"thread:" m["thread_id"],project:m.Get("project",""),title:m["title"],buttonRect:"",source:"state"})
- }
- return out
-}
-MergeCandidates(uia,state){
- out:=[]
- seen:=Map()
- for _,s in uia {
-  if !seen.Has(s.key) {
-   seen[s.key]:=true
-   out.Push(s)
-  }
- }
- for _,s in state {
-  if !seen.Has(s.key) {
-   seen[s.key]:=true
-   out.Push(s)
-  }
- }
- return out
-}
 FindSessionByTitle(list,title){
  found:=0
  for _,s in list
@@ -510,24 +474,6 @@ RunUIA(mode,title:=""){
  try {
   FileDelete outFile
  }
- return result
-}
-RunState(){
- global statePs
- outFile:=A_Temp "\codex-auto-retry-state-" A_TickCount ".txt"
- ps:=A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe"
- cmd:=Format('"{1}" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{2}" -OutFile "{3}"',ps,statePs,outFile)
- try {
-  RunWait(cmd,,"Hide")
- } catch {
-  return "STATE_READER_START_FAILED"
- }
- try {
-  result:=FileRead(outFile,"UTF-8")
- } catch {
-  result:="STATE_READER_READ_FAILED"
- }
- try FileDelete outFile
  return result
 }
 IsCodex(hwnd){
