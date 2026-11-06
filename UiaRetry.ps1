@@ -222,19 +222,22 @@ try {
         $rr=$root.Current.BoundingRectangle
         $sendNames=@('Send','Continue',([string][char]0x53d1+[char]0x9001),([string][char]0x7ee7+[char]0x7eed))
         $voiceNames=@('Voice',([string][char]0x8bed+[char]0x97f3))
+        $excludedActionNames=@('Voice','听写','Stop','停止','Retry','重试','重試')
         $actions=@($all | Where-Object {
           $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and
-          $sendNames -contains $_.Current.Name -and
           $_.Current.IsEnabled -and -not $_.Current.IsOffscreen -and
           $_.Current.BoundingRectangle.Y -gt ($rr.Y+$rr.Height*0.70) -and
-          $_.Current.BoundingRectangle.X -gt ($rr.X+$rr.Width*0.70)
+          $_.Current.BoundingRectangle.X -gt ($rr.X+$rr.Width*0.70) -and
+          $excludedActionNames -notcontains $_.Current.Name
         })
         $voice=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $voiceNames -contains $_.Current.Name -and -not $_.Current.IsOffscreen })
         if($actions.Count -eq 1) {
           $a=$actions[0];$ar=$a.Current.BoundingRectangle
-          if($Mode -eq 'send-state') { Emit ("SEND_READY|button={0}|screen_x={1}|screen_y={2}|rect={3}|state=ENABLED_BOTTOM_ACTION" -f (Clean $a.Current.Name),([int]($ar.X+$ar.Width/2)),([int]($ar.Y+$ar.Height/2)),(RectText $ar)) }
+          $buttonName=Clean $a.Current.Name
+          if(!$buttonName){$buttonName=Clean $a.Current.AutomationId;if(!$buttonName){$buttonName='unnamed_bottom_action'}}
+          if($Mode -eq 'send-state') { Emit ("SEND_READY|button={0}|screen_x={1}|screen_y={2}|rect={3}|state=ENABLED_BOTTOM_ACTION" -f $buttonName,([int]($ar.X+$ar.Width/2)),([int]($ar.Y+$ar.Height/2)),(RectText $ar)) }
           else {
-            try {$ip=$a.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern);$ip.Invoke();Emit ("SEND|button={0}|screen_x={1}|screen_y={2}|rect={3}|state=UIA_INVOKE_SENT" -f (Clean $a.Current.Name),([int]($ar.X+$ar.Width/2)),([int]($ar.Y+$ar.Height/2)),(RectText $ar))}
+            try {$ip=$a.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern);$ip.Invoke();Emit ("SEND|button={0}|screen_x={1}|screen_y={2}|rect={3}|state=UIA_INVOKE_SENT" -f $buttonName,([int]($ar.X+$ar.Width/2)),([int]($ar.Y+$ar.Height/2)),(RectText $ar))}
             catch {Emit ("RESULT|INVOKE_SEND_FAILED|{0}" -f (Clean $_.Exception.Message))}
           }
         } elseif($voice.Count -gt 0){Emit 'RESULT|VOICE_ACTION|The composer exposes voice input, so no automatic send action is permitted.'}
