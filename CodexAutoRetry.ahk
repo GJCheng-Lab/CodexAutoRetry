@@ -11,6 +11,7 @@ SetControlDelay -1
 ; real mouse or send keyboard input.
 
 psFile := A_ScriptDir "\UiaRetry.ps1"
+statePs := A_ScriptDir "\CodexStateReader.ps1"
 logFile := A_ScriptDir "\retry.log"
 cfg := A_ScriptDir "\settings.ini"
 scanMs := ReadNumber("scan_seconds",5,1,60)*1000
@@ -27,10 +28,15 @@ totalAttempts:=0
 lastAttempt:=0
 attemptTimes:=[]
 sessionState:=Map()
+stateHandled:=Map()
 noticeGui:=0
 noticeAlpha:=0
 if !FileExist(psFile) {
  MsgBox "缺少 UiaRetry.ps1。","Codex Auto Retry","Iconx"
+ ExitApp()
+}
+if !FileExist(statePs) {
+ MsgBox "缺少 CodexStateReader.ps1。","Codex Auto Retry","Iconx"
  ExitApp()
 }
 SetTimer AutoBindTimer, 1000
@@ -82,7 +88,7 @@ AutoBindTimer(){
 }
 
 BindHwnd(hwnd,automatic){
- global targetHwnd,targetPid,autoEnabled,paused,totalAttempts,lastAttempt,attemptTimes,sessionState
+ global targetHwnd,targetPid,autoEnabled,paused,totalAttempts,lastAttempt,attemptTimes,sessionState,stateHandled
  if !IsCodex(hwnd)
   return
  targetHwnd:=hwnd
@@ -93,6 +99,7 @@ BindHwnd(hwnd,automatic){
  lastAttempt:=0
  attemptTimes:=[]
  sessionState:=Map()
+ stateHandled:=Map()
  Log((automatic ? "AUTO_BIND" : "BIND") "|pid=" targetPid "|hwnd=" targetHwnd)
  TrayTip autoEnabled ? "已自动绑定 Codex；5秒常驻监测已开启，单会话冷却10秒。" : "已绑定 Codex；自动监测关闭。","Codex Auto Retry"
 }
@@ -171,16 +178,14 @@ PauseAuto(){
 }
 
 ScanTimer(){
- global autoEnabled,paused,busy,targetHwnd,sessionState
+ global autoEnabled,paused,busy,targetHwnd,sessionState,stateHandled
  if !autoEnabled||paused||busy||!ValidTarget()
    return
  busy:=true
  try {
    sessions:=ParseSessions(RunUIA("scan"))
-   ; Automatic actions are driven only by the live UIA sidebar marker.
-   ; CodexStateReader.ps1 remains a read-only diagnostic tool and never adds
-   ; a candidate by itself.
-   candidates:=sessions
+   stateSessions:=sessions.Length?[]:ParseStateFailures(RunState())
+   candidates:=MergeCandidates(sessions,stateSessions,stateHandled)
    for _,s in candidates {
      if !sessionState.Has(s.key) {
        sessionState[s.key]:={project:s.project,title:s.title,last:0,tick:0,tries:0,result:"DETECTED"}
@@ -194,7 +199,7 @@ ScanTimer(){
 }
 
 ProcessOne(manual:=false,candidate:=0){
- global cooldownMs,maxMinute,maxTotal,totalAttempts,attemptTimes,sessionState,verifyMs,targetHwnd
+ global cooldownMs,maxMinute,maxTotal,totalAttempts,attemptTimes,sessionState,stateHandled,verifyMs,targetHwnd
  if !candidate {
    sessions:=ParseSessions(RunUIA("scan"))
    if !sessions.Length {
@@ -233,6 +238,10 @@ ProcessOne(manual:=false,candidate:=0){
    return false
   }
  }
+ if match.source="state" && stateHandled.Has(match.key)
+  return false
+ if match.source="state"
+  stateHandled[match.key]:=true
  nav:=RunUIA("invoke-session",match.title)
  if !InStr(nav,"INVOKE_SESSION_SENT") {
   MarkDeferred(match,"NAVIGATION_FAILED")
@@ -245,8 +254,18 @@ ProcessOne(manual:=false,candidate:=0){
   Log("SKIP|session_not_confirmed|key=" match.key)
   return false
  }
+ current:=RunUIA("current")
+ sendState:=RunUIA("send-state")
+ if InStr(current,"COMPOSER_HAS_CONTENT") || InStr(sendState,"COMPOSER_HAS_CONTENT") {
+  MarkDeferred(match,"COMPOSER_HAS_CONTENT")
+  if match.source="state"
+   stateHandled[match.key]:=true
+  ShowNotice(match.project,match.title,"检测到发送区已有内容，已跳过")
+  Log("SKIP|composer_has_content|project=" match.project "|title=" match.title "|key=" match.key)
+  return false
+ }
  NoticeBeforeAction(match)
- retry:=ParseRetry(RunUIA("current"))
+ retry:=ParseRetry(current)
  action:="retry"
  if retry {
   invokeResult:=RunUIA("invoke-retry")
@@ -256,7 +275,6 @@ ProcessOne(manual:=false,candidate:=0){
    return false
   }
  } else {
-  sendState:=RunUIA("send-state")
   if !InStr(sendState,"SEND_READY|") {
    MarkDeferred(match,"NO_SAFE_ACTION")
    Log("SKIP|no_retry_or_safe_send_action|key=" match.key "|detail=" OneLine(sendState))
@@ -282,6 +300,8 @@ ProcessOne(manual:=false,candidate:=0){
  Log("SENT|action=" action "|project=" match.project "|title=" match.title "|key=" match.key "|attempt=" totalAttempts)
  result:=ObserveResult(verifyMs)
  st.result:=result
+ if match.source="state"
+  stateHandled[match.key]:=true
  Log("VERIFY|project=" match.project "|title=" match.title "|result=" result)
  return true
 }
@@ -294,7 +314,7 @@ NoticeBeforeAction(match){
  SetTimer NoticeFade, 100
 }
 
-ShowNotice(project,title){
+ShowNotice(project,title,reason:="发现异常会话"){
  global noticeGui,noticeAlpha
  if IsObject(noticeGui) {
   try {
@@ -305,7 +325,7 @@ ShowNotice(project,title){
  noticeGui:=Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000")
  noticeGui.BackColor:="202124"
  noticeGui.SetFont("s10 cFFFFFF","Segoe UI")
- noticeGui.AddText("x14 y10 w360 h54", "发现异常会话`n" project " → " title)
+ noticeGui.AddText("x14 y10 w360 h54", reason "`n" project " → " title)
  w:=390
  h:=78
  mon:=MonitorGetPrimary()
@@ -402,6 +422,39 @@ ParseSessions(text){
  }
  return out
 }
+ParseStateFailures(text){
+ out:=[]
+ for _,line in StrSplit(text,Chr(10)){
+  p:=StrSplit(Trim(line),"|")
+  if p.Length<2||p[1]!="STATE_FAILURE"
+   continue
+  m:=Map()
+  for i,v in p
+   if i>1&&InStr(v,"="){
+    q:=StrSplit(v,"=",2),m[q[1]]:=q[2]
+   }
+  if m.Has("thread_id")&&m.Has("turn_id")&&m.Has("title")&&m["title"]!=""
+   out.Push({key:"thread:" m["thread_id"] "/turn:" m["turn_id"],project:m.Get("project",""),title:m["title"],buttonRect:"",source:"state"})
+ }
+ return out
+}
+MergeCandidates(uia,state,handled){
+ out:=[]
+ seen:=Map()
+ for _,s in uia {
+   if !seen.Has(s.key){
+    seen[s.key]:=true
+    out.Push(s)
+   }
+ }
+ for _,s in state {
+   if !seen.Has(s.key)&&!handled.Has(s.key){
+    seen[s.key]:=true
+    out.Push(s)
+   }
+ }
+ return out
+}
 ParseRetry(text){
  for _,line in StrSplit(text,Chr(10)){
    p:=StrSplit(Trim(line),"|")
@@ -474,6 +527,24 @@ RunUIA(mode,title:=""){
  try {
   FileDelete outFile
  }
+ return result
+}
+RunState(){
+ global statePs
+ outFile:=A_Temp "\codex-auto-retry-state-" A_TickCount ".txt"
+ ps:=A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe"
+ cmd:=Format('"{1}" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{2}" -MaxAgeHours 24 -OutFile "{3}"',ps,statePs,outFile)
+  try {
+   RunWait(cmd,,"Hide")
+  } catch {
+   return "STATE_READER_START_FAILED"
+  }
+  try {
+   result:=FileRead(outFile,"UTF-8")
+  } catch {
+   result:="STATE_READER_READ_FAILED"
+  }
+ try FileDelete outFile
  return result
 }
 IsCodex(hwnd){

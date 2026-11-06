@@ -197,9 +197,26 @@ try {
     }
 
     if($Mode -in @('send-state','invoke-send')) {
+      $rr=$root.Current.BoundingRectangle
+      $placeholderNames=@(([string][char]0x548c+[char]0x20+[char]0x43+[char]0x6f+[char]0x64+[char]0x65+[char]0x78+[char]0x20+[char]0x4e00+[char]0x8d77+[char]0x5de5+[char]0x4f5c),'Work with Codex','Ask Codex',([string][char]0x5f00+[char]0x59cb+[char]0x8f93+[char]0x5165),([string][char]0x8f93+[char]0x5165+[char]0x6d88+[char]0x606f))
+      $composer=@($all | Where-Object {
+        $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit -and
+        $_.Current.IsEnabled -and -not $_.Current.IsOffscreen -and
+        $_.Current.BoundingRectangle.Y -gt ($rr.Y+$rr.Height*0.70)
+      })
+      $hasComposerContent=$false
+      foreach($edit in $composer){
+        $ec=$edit.Current;$value=''
+        try {$vp=$edit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern);$value=([string]$vp.Current.Value).Trim()} catch {}
+        if(-not [string]::IsNullOrWhiteSpace($value) -and $placeholderNames -notcontains $value){$hasComposerContent=$true;break}
+      }
+      if($hasComposerContent){
+        Emit 'RESULT|COMPOSER_HAS_CONTENT|Visible enabled composer contains user content; no send action is permitted.'
+      }
       $errors=@($all | Where-Object { $_.Current.Name -and $_.Current.Name -match 'Selected model is at capacity' })
       $running=@($all | Where-Object { $_.Current.Name -and $_.Current.Name -match '^(Stop|停止)$' -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
-      if($running.Count -gt 0){Emit 'RESULT|RUNNING_SIGNAL|A current stop control is visible; send fallback is skipped.'}
+      if($hasComposerContent){ }
+      elseif($running.Count -gt 0){Emit 'RESULT|RUNNING_SIGNAL|A current stop control is visible; send fallback is skipped.'}
       elseif($errors.Count -eq 0){Emit 'RESULT|NO_CURRENT_CAPACITY|No current capacity error was exposed by UIA.'}
       else {
         $rr=$root.Current.BoundingRectangle
