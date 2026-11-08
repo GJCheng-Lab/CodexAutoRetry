@@ -1,0 +1,8 @@
+settings.ini
+retry.log
+probe.log
+*.tmp
+ahk-check.txt
+upstream/
+.DS_Store
+Thumbs.db
