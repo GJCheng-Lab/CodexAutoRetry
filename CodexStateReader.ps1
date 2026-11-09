@@ -71,6 +71,9 @@ WHERE tt.status='failed'
   AND COALESCE(tt.completed_at,tt.started_at) >= $cutoff
   AND (
     lower(COALESCE(json_extract(tt.error_json,'$.message'),'')) LIKE 'selected model is at capacity%'
+    OR lower(COALESCE(json_extract(tt.error_json,'$.message'),'')) LIKE '%429%'
+    OR lower(COALESCE(json_extract(tt.error_json,'$.message'),'')) LIKE '%too many requests%'
+    OR lower(COALESCE(json_extract(tt.error_json,'$.message'),'')) LIKE '%exceeded retry limit%'
     OR json_extract(tt.error_json,'$.codexErrorInfo')='serverOverloaded'
   )
 ORDER BY COALESCE(tt.completed_at,tt.started_at) DESC;
@@ -85,7 +88,7 @@ try {
     Emit ("STATE_FAILURE|thread_id={0}|turn_id={1}|status={2}|error_code={3}|message={4}|project_id={5}|project={6}|title={7}|cwd={8}|time={9}" -f
       (Clean $p[0]),(Clean $p[1]),(Clean $p[2]),(Clean $p[3]),(Clean $p[4]),(Clean $p[5]),(Clean $p[6]),(TitlePreview $p[7]),(Clean $p[8]),(Clean $p[9]))
   }
-  Emit ("STATE_SCOPE|latest_failed_capacity_turns={0}|max_age_hours={1}|scope=local_Codex_state_only|source=thread_history_1.sqlite+state_5.sqlite|mode=read_only" -f $rows.Count,$MaxAgeHours)
+  Emit ("STATE_SCOPE|latest_failed_turns={0}|max_age_hours={1}|scope=local_Codex_state_only|source=thread_history_1.sqlite+state_5.sqlite|mode=read_only" -f $rows.Count,$MaxAgeHours)
 } catch {
   Emit ("STATE_READER_ERROR|{0}" -f (Clean $_.Exception.Message))
 }

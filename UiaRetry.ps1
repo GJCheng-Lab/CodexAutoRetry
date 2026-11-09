@@ -39,7 +39,7 @@ try {
       foreach($e in $all) {
         $c=$e.Current; $ct=Clean $c.ControlType.ProgrammaticName
         if(-not $types.ContainsKey($ct)){$types[$ct]=0};$types[$ct]++
-        if($c.Name -match 'Task failed|Retry|capacity') {
+        if($c.Name -match 'Task failed|Retry|capacity|429|Too Many Requests|exceeded retry limit') {
           $interesting++
           $runtime=''
           try {$runtime=(($e.GetRuntimeId()) -join '.')} catch {}
@@ -188,6 +188,7 @@ try {
       $buttons=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $retryNames -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
       $best=$null;$bestDy=[double]::PositiveInfinity
       foreach($b in $buttons){$br=$b.Current.BoundingRectangle;$by=$br.Y+$br.Height/2;foreach($er in $errors){$erx=$er.Current.BoundingRectangle;$ey=$erx.Y+$erx.Height/2;$dy=[Math]::Abs($by-$ey);if($dy -le [Math]::Max(40,$br.Height*2) -and $br.X -gt $erx.X -and $dy -lt $bestDy){$best=$b;$bestDy=$dy}}}
+      if($null -eq $best -and $buttons.Count -eq 1){$best=$buttons[0]}
       if($best){
         try {
           $ip=$best.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
@@ -195,8 +196,8 @@ try {
           $ip.Invoke()
           Emit ("RETRY|button={0}|screen_x={1}|screen_y={2}|rect={3}|state=UIA_INVOKE_SENT" -f (Clean $best.Current.Name),([int]($r.X+$r.Width/2)),([int]($r.Y+$r.Height/2)),(RectText $r))
         } catch { Emit ("RESULT|INVOKE_RETRY_FAILED|{0}" -f (Clean $_.Exception.Message)) }
-      } elseif($errors.Count -gt 0){Emit 'RESULT|CAPACITY_WITHOUT_MATCHED_RETRY|Current capacity error is visible but no same-area enabled retry button was exposed.'}
-      else{Emit 'RESULT|NO_CURRENT_CAPACITY|No current capacity error was exposed by UIA.'}
+      } elseif($errors.Count -gt 0){Emit 'RESULT|ERROR_WITHOUT_MATCHED_RETRY|Current error is visible but no enabled retry button was exposed.'}
+      else{Emit 'RESULT|NO_RETRY_BUTTON|No enabled retry button was exposed by UIA.'}
     }
 
     if($Mode -in @('send-state','invoke-send')) {
@@ -220,7 +221,6 @@ try {
       $running=@($all | Where-Object { $stopNames -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
       if($hasComposerContent){ }
       elseif($running.Count -gt 0){Emit 'RESULT|RUNNING_SIGNAL|A current stop control is visible; send fallback is skipped.'}
-      elseif($errors.Count -eq 0){Emit 'RESULT|NO_CURRENT_CAPACITY|No current capacity error was exposed by UIA.'}
       else {
         $rr=$root.Current.BoundingRectangle
         $sendNames=@('Send','Continue',([string][char]0x53d1+[char]0x9001),([string][char]0x7ee7+[char]0x7eed))
@@ -243,7 +243,7 @@ try {
             catch {Emit ("RESULT|INVOKE_SEND_FAILED|{0}" -f (Clean $_.Exception.Message))}
           }
         } elseif($voice.Count -gt 0){Emit 'RESULT|VOICE_ACTION|The composer exposes voice input, so no automatic send action is permitted.'}
-        else{Emit 'RESULT|SEND_ACTION_NOT_EXPOSED|No unique enabled bottom Send/Continue action was exposed by UIA.'}
+        else{Emit 'RESULT|SEND_ACTION_NOT_EXPOSED|No unique enabled bottom retry action was exposed by UIA.'}
       }
     }
 
@@ -255,9 +255,10 @@ try {
       $buttons=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $retryNames -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
       $best=$null;$bestDy=[double]::PositiveInfinity;$bestError=''
       foreach($b in $buttons){$br=$b.Current.BoundingRectangle;$by=$br.Y+$br.Height/2;foreach($er in $errors){$erx=$er.Current.BoundingRectangle;$ey=$erx.Y+$erx.Height/2;$dy=[Math]::Abs($by-$ey);if($dy -le [Math]::Max(40,$br.Height*2) -and $br.X -gt $erx.X -and $dy -lt $bestDy){$best=$b;$bestDy=$dy;$bestError=Clean $er.Current.Name}}}
+      if($null -eq $best -and $buttons.Count -eq 1){$best=$buttons[0]}
       if($best){$r=$best.Current.BoundingRectangle;Emit ("RETRY|error={0}|button={1}|screen_x={2}|screen_y={3}|rect={4}|state=VISIBLE_ENABLED_MATCHED" -f $bestError,(Clean $best.Current.Name),([int]($r.X+$r.Width/2)),([int]($r.Y+$r.Height/2)),(RectText $r))}
-      elseif($errors.Count -gt 0){Emit 'RESULT|CAPACITY_WITHOUT_MATCHED_RETRY|Current capacity error is visible but no same-area enabled retry button was exposed.'}
-      else{Emit 'RESULT|NO_CURRENT_CAPACITY|No current capacity error was exposed by UIA.'}
+      elseif($buttons.Count -gt 1){Emit 'RESULT|RETRY_BUTTON_AMBIGUOUS|More than one enabled retry button was exposed by UIA.'}
+      else{Emit 'RESULT|NO_RETRY_BUTTON|No enabled retry button was exposed by UIA.'}
       }
     }
 
