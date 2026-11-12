@@ -34,13 +34,13 @@ Windows AutoHotkey v2 工具，用于监测 Codex 独立桌面客户端侧栏中
 
 官方下载安装页：[AutoHotkey Downloads](https://www.autohotkey.com/download/)。
 
-本机已准备的 AutoHotkey v2 安装包路径：
+项目根目录已附带 AutoHotkey v2 安装包：
 
 ```text
-E:\1.Softwares\AutoHotkey_2.0.31_setup.exe
+AutoHotkey_2.0.31_setup.exe
 ```
 
-运行安装包完成安装后，即可直接双击项目中的 `CodexAutoRetry.ahk`。
+运行该安装包完成安装后，即可直接双击项目中的 `CodexAutoRetry.ahk`。
 
 ## 运行
 
