@@ -30,10 +30,22 @@ Windows AutoHotkey v2 工具，用于监测 Codex 独立桌面客户端侧栏中
 - Codex 独立桌面客户端
 - `sqlite3.exe` 在 PATH 中时，可额外读取本机 Codex 状态库
 
+## 安装 AutoHotkey
+
+官方下载安装页：[AutoHotkey Downloads](https://www.autohotkey.com/download/)。
+
+本机已准备的 AutoHotkey v2 安装包路径：
+
+```text
+E:\1.Softwares\AutoHotkey_2.0.31_setup.exe
+```
+
+运行安装包完成安装后，即可直接双击项目中的 `CodexAutoRetry.ahk`。
+
 ## 运行
 
 1. 安装 AutoHotkey v2。
-2. 将 `settings.example.ini` 复制为 `settings.ini`，按需修改。
+2. 检查项目根目录中的 `settings.ini`，按需修改。
 3. 双击运行 `CodexAutoRetry.ahk`。
 
 程序不会修改 Codex 安装文件、认证信息、远程项目、SSH 配置或 Codex 状态数据库。
@@ -51,7 +63,7 @@ Windows AutoHotkey v2 工具，用于监测 Codex 独立桌面客户端侧栏中
 
 ## 配置
 
-示例见 [settings.example.ini](settings.example.ini)：
+默认配置见 [settings.ini](settings.ini)：
 
 ```ini
 [Limits]
