@@ -12,14 +12,9 @@ window -> navigation -> list -> project group -> session list item -> session bu
                                                              └── failure image
 ```
 
-The failure marker was initially observed as an `Image` child with either the
-English name `Task failed` or the Chinese name `任务未成功`. After a client
-update, the same visible red marker was exposed as an unnamed `Image` at the
-right edge of the session row, approximately 22 by 22 pixels. Normal connected
-state images in the same sidebar were approximately 14 by 14 pixels. These
-sizes are recorded as observations only, not matching thresholds. The scanner
-matches the unnamed right-edge `Image` only inside a session row; the session
-title is not used as an error heuristic.
+The failure marker has been observed as an `Image` child with either the English
+name `Task failed` or the Chinese name `任务未成功`. The session title is not
+used as an error heuristic.
 
 ## Properties used
 
