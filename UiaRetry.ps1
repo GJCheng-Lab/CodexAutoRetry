@@ -22,26 +22,6 @@ $voiceNames=@('Voice',([string][char]0x542c+[char]0x5199))
 function Clean([object]$v) { if($null -eq $v){return ''}; return (([string]$v) -replace '[\t\r\n]+',' ' -replace '\|','/') }
 function RectText($r) { if($null -eq $r -or $r.Width -le 0 -or $r.Height -le 0){return ''}; '{0},{1},{2},{3}' -f ([int]$r.X),([int]$r.Y),([int]$r.Width),([int]$r.Height) }
 function Emit([string]$s) { $script:records.Add($s) }
-function IsRedStatusImage($control) {
-  $r=$control.BoundingRectangle
-  if($null -eq $r -or $r.Width -le 0 -or $r.Height -le 0){return $false}
-  try {
-    Add-Type -AssemblyName System.Drawing
-    $w=[Math]::Min(64,[Math]::Max(1,[int]$r.Width));$h=[Math]::Min(64,[Math]::Max(1,[int]$r.Height))
-    $bmp=New-Object System.Drawing.Bitmap($w,$h)
-    $g=[System.Drawing.Graphics]::FromImage($bmp)
-    $g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,(New-Object System.Drawing.Size($w,$h)))
-    $red=0
-    for($y=0;$y -lt $h;$y++){
-      for($x=0;$x -lt $w;$x++){
-        $p=$bmp.GetPixel($x,$y)
-        if($p.R -ge 150 -and $p.R -ge ($p.G+35) -and $p.R -ge ($p.B+35)){$red++}
-      }
-    }
-    $g.Dispose();$bmp.Dispose()
-    return $red -ge 2
-  } catch { return $false }
-}
 
 $records=New-Object 'System.Collections.Generic.List[string]'
 try {
@@ -89,7 +69,7 @@ try {
               if($failedNames -contains $cc.Name){$marker=$ch}
               if($null -eq $marker -and $cc.ControlType -eq [System.Windows.Automation.ControlType]::Image -and [string]::IsNullOrWhiteSpace($cc.Name) -and -not $cc.IsOffscreen){
                 $ir=$cc.BoundingRectangle;$rowRect=$c.BoundingRectangle
-                if($ir.Width -gt 0 -and $ir.Height -gt 0 -and $ir.X -ge ($rowRect.X+$rowRect.Width-35) -and (IsRedStatusImage $cc)){$marker=$ch}
+                if($ir.Width -gt 0 -and $ir.Height -gt 0 -and $ir.X -ge ($rowRect.X+$rowRect.Width-35)){$marker=$ch}
               }
             }
             if($null -eq $sessionButton){
