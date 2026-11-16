@@ -67,6 +67,10 @@ try {
               $cc=$ch.Current
               if($cc.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $cc.Name -eq $rowTitle){$sessionButton=$ch}
               if($failedNames -contains $cc.Name){$marker=$ch}
+              if($null -eq $marker -and $cc.ControlType -eq [System.Windows.Automation.ControlType]::Image -and [string]::IsNullOrWhiteSpace($cc.Name) -and -not $cc.IsOffscreen){
+                $ir=$cc.BoundingRectangle;$rowRect=$c.BoundingRectangle
+                if($ir.Width -gt 0 -and $ir.Height -gt 0 -and $ir.X -ge ($rowRect.X+$rowRect.Width-35)){$marker=$ch}
+              }
             }
             if($null -eq $sessionButton){
               foreach($ch in $children){
@@ -172,7 +176,7 @@ try {
     if($Mode -eq 'invoke-session') {
       $rr=$root.Current.BoundingRectangle
       $limit=$rr.X+($rr.Width*0.28)
-      $matches=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $_.Current.Name -eq $Title -and -not $_.Current.IsOffscreen -and $_.Current.BoundingRectangle.X -lt $limit })
+      $matches=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $_.Current.Name -eq $Title -and -not $_.Current.IsOffscreen -and $_.Current.BoundingRectangle.X -lt $limit -and $_.Current.BoundingRectangle.Y -gt ($rr.Y+100) })
       if($matches.Count -eq 1) {
         try {
           $ip=$matches[0].GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)

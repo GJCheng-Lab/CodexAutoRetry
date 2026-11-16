@@ -227,6 +227,8 @@ ProcessOne(manual:=false,candidate:=0){
   match:=titleCount=1?FindSessionByTitle(latest,candidate.title):candidate
  } else {
   match:=FindSession(latest,candidate.key)
+  if !match
+   match:=candidate
  }
  if !match {
   Log("SKIP|ambiguous_or_not_visible|key=" candidate.key)
