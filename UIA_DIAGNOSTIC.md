@@ -17,9 +17,11 @@ English name `Task failed` or the Chinese name `任务未成功`. After a client
 update, the same visible red marker was exposed as an unnamed `Image` at the
 right edge of the session row, approximately 22 by 22 pixels. Normal connected
 state images in the same sidebar were approximately 14 by 14 pixels. These
-sizes are recorded as observations only, not matching thresholds. The scanner
-matches the unnamed right-edge `Image` only inside a session row; the session
-title is not used as an error heuristic.
+sizes are recorded as observations only, not matching thresholds. For an
+unnamed right-edge `Image`, the scanner samples the color inside the current
+UIA-provided rectangle and accepts it only when red pixels are present. A gray
+running spinner is therefore not an error marker. If the window is covered and
+the color cannot be sampled, the unnamed image is skipped conservatively.
 
 ## Properties used
 
