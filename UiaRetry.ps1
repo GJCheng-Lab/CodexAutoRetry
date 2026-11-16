@@ -22,7 +22,18 @@ $voiceNames=@('Voice',([string][char]0x542c+[char]0x5199))
 function Clean([object]$v) { if($null -eq $v){return ''}; return (([string]$v) -replace '[\t\r\n]+',' ' -replace '\|','/') }
 function RectText($r) { if($null -eq $r -or $r.Width -le 0 -or $r.Height -le 0){return ''}; '{0},{1},{2},{3}' -f ([int]$r.X),([int]$r.Y),([int]$r.Width),([int]$r.Height) }
 function Emit([string]$s) { $script:records.Add($s) }
-function IsRedStatusImage($control) {
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class CodexAutoRetryForegroundProbe {
+  [DllImport("user32.dll")]
+  public static extern IntPtr GetForegroundWindow();
+}
+'@
+function IsRedStatusImage($control,[long]$windowHandle) {
+  try {
+    if([CodexAutoRetryForegroundProbe]::GetForegroundWindow().ToInt64() -ne $windowHandle){return $false}
+  } catch { return $false }
   $r=$control.BoundingRectangle
   if($null -eq $r -or $r.Width -le 0 -or $r.Height -le 0){return $false}
   try {
@@ -89,7 +100,7 @@ try {
               if($failedNames -contains $cc.Name){$marker=$ch}
               if($null -eq $marker -and $cc.ControlType -eq [System.Windows.Automation.ControlType]::Image -and [string]::IsNullOrWhiteSpace($cc.Name) -and -not $cc.IsOffscreen){
                 $ir=$cc.BoundingRectangle;$rowRect=$c.BoundingRectangle
-                if($ir.Width -gt 0 -and $ir.Height -gt 0 -and $ir.X -ge ($rowRect.X+$rowRect.Width-35) -and (IsRedStatusImage $cc)){$marker=$ch}
+                if($ir.Width -gt 0 -and $ir.Height -gt 0 -and $ir.X -ge ($rowRect.X+$rowRect.Width-35) -and (IsRedStatusImage $cc $Handle)){$marker=$ch}
               }
             }
             if($null -eq $sessionButton){

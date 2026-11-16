@@ -55,10 +55,16 @@ claim coverage of collapsed, virtualized, or unloaded projects. It does not use
 hover, OCR, fixed-pixel color detection, foreground activation, or real mouse
 and keyboard input.
 
-When the live sidebar tree does not expose a failure marker, the local state
-reader may provide a recent failed turn as a candidate. Session navigation,
-current error verification, and action invocation still require UIA. Each
+The local state reader is diagnostic only. It never creates an automatic
+candidate, session navigation, or retry action. Automatic processing requires
+an abnormal marker exposed by the current live UIA sidebar tree. Each
 `thread_id + turn_id` is handled at most once per tool run.
+
+Unnamed sidebar status images are color sampled only while the bound Codex
+window is the foreground window. This prevents a covered background window
+from sampling red pixels belonging to another application. If UIA does not
+expose a readable status while Codex is covered, the status is skipped rather
+than causing focus activation.
 
 ## Diagnostic commands
 

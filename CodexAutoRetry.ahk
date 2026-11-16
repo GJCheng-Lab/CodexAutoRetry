@@ -184,8 +184,9 @@ ScanTimer(){
  busy:=true
  try {
    sessions:=ParseSessions(RunUIA("scan"))
-   stateSessions:=sessions.Length?[]:ParseStateFailures(RunState())
-   candidates:=MergeCandidates(sessions,stateSessions,stateHandled)
+   ; The local state database is diagnostic only.  It can contain stale or
+   ; historical failures, so it must never create an automatic UI action.
+   candidates:=sessions
    for _,s in candidates {
      if !sessionState.Has(s.key) {
        sessionState[s.key]:={project:s.project,title:s.title,last:0,tick:0,tries:0,result:"DETECTED"}
