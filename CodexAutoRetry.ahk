@@ -184,8 +184,10 @@ ScanTimer(){
  busy:=true
  try {
    sessions:=ParseSessions(RunUIA("scan"))
-   stateSessions:=sessions.Length?[]:ParseStateFailures(RunState())
-   candidates:=MergeCandidates(sessions,stateSessions,stateHandled)
+   activeSessions:=ParseActive(RunUIA("active"))
+   stateSessions:=ParseStateFailures(RunState())
+   candidates:=MergeCandidates(sessions,activeSessions,stateHandled)
+   candidates:=MergeCandidates(candidates,stateSessions,stateHandled)
    for _,s in candidates {
      if !sessionState.Has(s.key) {
        sessionState[s.key]:={project:s.project,title:s.title,last:0,tick:0,tries:0,result:"DETECTED"}
@@ -217,7 +219,10 @@ ProcessOne(manual:=false,candidate:=0){
   return false
  }
  latest:=ParseSessions(RunUIA("scan"))
- if candidate.source="state" {
+ if candidate.source="active" {
+  match:=candidate
+  nav:="ACTIVE_SESSION_ALREADY_OPEN"
+ } else if candidate.source="state" {
   titleCount:=CountSessionTitle(latest,candidate.title)
   if titleCount>1 {
    MarkDeferred(candidate,"AMBIGUOUS_TITLE")
@@ -242,8 +247,9 @@ ProcessOne(manual:=false,candidate:=0){
   return false
  if match.source="state"
   stateHandled[match.key]:=true
- nav:=RunUIA("invoke-session",match.title)
- if !InStr(nav,"INVOKE_SESSION_SENT") {
+ if candidate.source!="active"
+  nav:=RunUIA("invoke-session",match.title)
+ if candidate.source!="active" && !InStr(nav,"INVOKE_SESSION_SENT") {
   MarkDeferred(match,"NAVIGATION_FAILED")
   Log("SKIP|session_navigation_invoke_failed|key=" match.key "|detail=" OneLine(nav))
   return false
@@ -419,6 +425,22 @@ ParseSessions(text){
       }
    if m.Has("key")&&m.Has("title")&&m.Has("button_rect")&&m["button_rect"]!=""
      out.Push({key:m["key"],project:m.Get("project",""),title:m["title"],buttonRect:m["button_rect"],source:"uia"})
+ }
+ return out
+}
+ParseActive(text){
+ out:=[]
+ for _,line in StrSplit(text,Chr(10)){
+  p:=StrSplit(Trim(line),"|")
+  if p.Length<2||p[1]!="ACTIVE"
+   continue
+  m:=Map()
+  for i,v in p
+   if i>1&&InStr(v,"="){
+    q:=StrSplit(v,"=",2),m[q[1]]:=q[2]
+   }
+  if m.Has("key")&&m.Has("title")&&m["title"]!=""
+   out.Push({key:m["key"],project:m.Get("project",""),title:m["title"],buttonRect:"",source:"active"})
  }
  return out
 }

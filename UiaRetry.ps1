@@ -6,7 +6,7 @@
 #>
 param(
   [Parameter(Mandatory=$true)][long]$Handle,
-  [ValidateSet('probe','scan','sidebar-dump','locate','current','verify','invoke-session','invoke-retry','send-state','invoke-send')][string]$Mode='probe',
+  [ValidateSet('probe','scan','active','sidebar-dump','locate','current','verify','invoke-session','invoke-retry','send-state','invoke-send')][string]$Mode='probe',
   [string]$Project='',
   [string]$SessionKey='',
   [string]$Title='',
@@ -141,6 +141,54 @@ try {
       }
       Emit ("SCAN_SUMMARY|rows={0}|failed={1}|scope=standard_UIA_descendants_only" -f $rows,$failed)
       if($rows -eq 0) { Emit 'SIDEBAR_STATUS_NOT_EXPOSED|No session row with the tested Task failed child was exposed by standard Windows UIA.' }
+    }
+
+    if($Mode -eq 'active') {
+      $errorPattern='Selected model is at capacity|429\s*Too Many Requests|exceeded retry limit|Task failed|任务未成功|任务失败'
+      $errors=@($all | Where-Object { $_.Current.Name -and $_.Current.Name -match $errorPattern })
+      $rr=$root.Current.BoundingRectangle
+      $excludedActionNames=@('Voice','Stop','Retry')+$voiceNames+$stopNames+$retryNames
+      $actions=@($all | Where-Object {
+        $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and
+        $_.Current.IsEnabled -and -not $_.Current.IsOffscreen -and
+        $_.Current.BoundingRectangle.Y -gt ($rr.Y+$rr.Height*0.70) -and
+        $_.Current.BoundingRectangle.X -gt ($rr.X+$rr.Width*0.70) -and
+        $excludedActionNames -notcontains $_.Current.Name
+      })
+      $retryButtons=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $retryNames -contains $_.Current.Name -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
+      $headerButtons=@($all | Where-Object {
+        $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and
+        $_.Current.Name -and -not $_.Current.IsOffscreen -and
+        $_.Current.BoundingRectangle.X -gt ($rr.X+$rr.Width*0.15) -and
+        $_.Current.BoundingRectangle.Y -ge $rr.Y -and
+        $_.Current.BoundingRectangle.Y -lt ($rr.Y+120) -and
+        $_.Current.BoundingRectangle.Width -gt 200
+      } | Sort-Object { $_.Current.BoundingRectangle.Y } | Select-Object -First 1)
+      if($errors.Count -gt 0 -and ($actions.Count -gt 0 -or $retryButtons.Count -gt 0) -and $headerButtons.Count -gt 0) {
+        $title=Clean $headerButtons[0].Current.Name
+        $project=''
+        $walker=[System.Windows.Automation.TreeWalker]::ControlViewWalker
+        $rows=@($all | Where-Object {
+          $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::ListItem -and
+          -not $_.Current.IsOffscreen -and
+          $_.Current.BoundingRectangle.X -lt ($rr.X+$rr.Width*0.30)
+        })
+        $row=$rows | Where-Object {
+          $children=$_.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+          @($children | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $_.Current.Name -eq $title }).Count -gt 0
+        } | Select-Object -First 1
+        if($row) {
+          $parent=$walker.GetParent($row)
+          while($null -ne $parent){
+            $pc=$parent.Current
+            if($pc.ControlType -eq [System.Windows.Automation.ControlType]::Group -and $pc.Name -and $pc.Name -notmatch '中的'){$project=Clean $pc.Name;break}
+            $parent=$walker.GetParent($parent)
+          }
+        }
+        Emit ("ACTIVE|key={0}|project={1}|title={2}|status=ACTIVE_ERROR|errors={3}|retry_buttons={4}|bottom_actions={5}" -f ((Clean $project)+'/'+$title),$project,$title,$errors.Count,$retryButtons.Count,$actions.Count)
+      } else {
+        Emit 'ACTIVE_NONE|No active error with a usable retry or bottom action was exposed by UIA.'
+      }
     }
 
     if($Mode -eq 'sidebar-dump') {
