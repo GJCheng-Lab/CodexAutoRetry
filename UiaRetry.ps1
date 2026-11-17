@@ -257,17 +257,26 @@ try {
       if($hasComposerContent){ }
       elseif($running.Count -gt 0){Emit 'RESULT|RUNNING_SIGNAL|A current stop control is visible; send fallback is skipped.'}
       else {
-        $rr=$root.Current.BoundingRectangle
-        $sendNames=@('Send','Continue',([string][char]0x53d1+[char]0x9001),([string][char]0x7ee7+[char]0x7eed))
+        # Anchor the action to the actual composer, not a percentage of the
+        # whole window: the sidebar and window width vary independently.
+        $editRect=$null
+        if($composer.Count -gt 0){$editRect=($composer | Sort-Object { $_.Current.BoundingRectangle.Y } -Descending | Select-Object -First 1).Current.BoundingRectangle}
         $excludedActionNames=@('Voice','Stop','Retry')+$voiceNames+$stopNames+$retryNames
-        $actions=@($all | Where-Object {
+        $actions=@($all | Where-Object { $b=$_.Current.BoundingRectangle
+          $null -ne $editRect -and
           $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and
           $_.Current.IsEnabled -and -not $_.Current.IsOffscreen -and
-          $_.Current.BoundingRectangle.Y -gt ($rr.Y+$rr.Height*0.70) -and
-          $_.Current.BoundingRectangle.X -gt ($rr.X+$rr.Width*0.70) -and
+          $b.Y -ge ($editRect.Y-10) -and $b.Y -lt ($editRect.Y+$editRect.Height+90) -and
+          $b.X -gt ($editRect.X+$editRect.Width*0.60) -and
+          $b.X -lt ($editRect.X+$editRect.Width+20) -and
           $excludedActionNames -notcontains $_.Current.Name
         })
-        $voice=@($all | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and $voiceNames -contains $_.Current.Name -and -not $_.Current.IsOffscreen })
+        $voice=@($all | Where-Object { $b=$_.Current.BoundingRectangle
+          $null -ne $editRect -and $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and
+          $voiceNames -contains $_.Current.Name -and -not $_.Current.IsOffscreen -and
+          $b.Y -ge ($editRect.Y-10) -and $b.Y -lt ($editRect.Y+$editRect.Height+90) -and
+          $b.X -gt ($editRect.X+$editRect.Width*0.60)
+        })
         if($actions.Count -eq 1) {
           $a=$actions[0];$ar=$a.Current.BoundingRectangle
           $buttonName=Clean $a.Current.Name
@@ -277,8 +286,13 @@ try {
             try {$ip=$a.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern);$ip.Invoke();Emit ("SEND|button={0}|screen_x={1}|screen_y={2}|rect={3}|state=UIA_INVOKE_SENT" -f $buttonName,([int]($ar.X+$ar.Width/2)),([int]($ar.Y+$ar.Height/2)),(RectText $ar))}
             catch {Emit ("RESULT|INVOKE_SEND_FAILED|{0}" -f (Clean $_.Exception.Message))}
           }
-        } elseif($voice.Count -gt 0){Emit 'RESULT|VOICE_ACTION|The composer exposes voice input, so no automatic send action is permitted.'}
-        else{Emit 'RESULT|SEND_ACTION_NOT_EXPOSED|No unique enabled bottom retry action was exposed by UIA.'}
+        } else {
+          $composerRect='';if($null -ne $editRect){$composerRect=RectText $editRect}
+          Emit ("ACTION_DIAG|composer_rect={0}|actions={1}|voice={2}|stop={3}" -f $composerRect,$actions.Count,$voice.Count,$running.Count)
+          if($actions.Count -gt 1){Emit 'RESULT|SEND_ACTION_AMBIGUOUS|More than one enabled composer action was exposed by UIA.'}
+          elseif($voice.Count -gt 0){Emit 'RESULT|VOICE_ACTION|The composer exposes voice input, so no automatic send action is permitted.'}
+          else{Emit 'RESULT|SEND_ACTION_NOT_EXPOSED|No unique enabled composer action was exposed by UIA.'}
+        }
       }
     }
 

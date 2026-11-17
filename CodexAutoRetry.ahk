@@ -265,10 +265,10 @@ ProcessOne(manual:=false,candidate:=0){
   Log("SKIP|composer_has_content|project=" match.project "|title=" match.title "|key=" match.key)
   return false
  }
- NoticeBeforeAction(match)
  retry:=ParseRetry(current)
  action:="retry"
  if retry {
+  NoticeBeforeAction(match)
   invokeResult:=RunUIA("invoke-retry")
   if !InStr(invokeResult,"RETRY|") {
    MarkDeferred(match,"RETRY_INVOKE_FAILED")
@@ -276,11 +276,17 @@ ProcessOne(manual:=false,candidate:=0){
    return false
   }
  } else {
+  if !InStr(sendState,"SEND_READY|") && !InStr(sendState,"RUNNING_SIGNAL") {
+   ; The composer action can appear one render after the sidebar marker.
+   Sleep 400
+   sendState:=RunUIA("send-state")
+  }
   if !InStr(sendState,"SEND_READY|") {
    MarkDeferred(match,"NO_SAFE_ACTION")
    Log("SKIP|no_retry_or_safe_send_action|key=" match.key "|detail=" OneLine(sendState))
    return false
   }
+  NoticeBeforeAction(match)
   invokeResult:=RunUIA("invoke-send")
   if !InStr(invokeResult,"SEND|") {
    Log("ERROR|send_button_uia_invoke_failed|key=" match.key "|detail=" OneLine(invokeResult))
