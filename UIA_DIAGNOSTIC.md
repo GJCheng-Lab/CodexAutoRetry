@@ -46,7 +46,10 @@ can inspect the bottom action button state:
 - a right-pointing action button can be invoked only when the capacity error is
   present, the composer is empty, and no running signal is visible.
 
-The default composer placeholder is ignored after whitespace normalization.
+The composer can expose a changing grey smart suggestion in `ValuePattern`.
+`TextPattern` is checked against the edit's accessible name to distinguish
+placeholder display from a user draft. If the visible text cannot be
+classified, automatic send is skipped.
 
 ## Coverage boundary
 
